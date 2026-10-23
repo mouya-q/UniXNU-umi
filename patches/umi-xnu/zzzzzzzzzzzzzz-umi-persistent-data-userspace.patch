@@ -1,14 +1,3 @@
---- a/bsd/kern/kern_exec.c
-+++ b/bsd/kern/kern_exec.c
-@@ -7302,7 +7302,7 @@
- 	 * sparse media. A sparse disk has no contiguous logical-byte address. */
- 	if (!native_ram_block_volume_seed(XNU_OWNER_DATA_VOLUME_UUID, &device, device_path,
- 	    sizeof(device_path), &base, &size, native_owner_data_seed_sha256)) { error = ENOENT; goto done; }
--	if (!size || size > UINT64_C(0x80000000) || (size & 4095)) goto done;
-+	if (!size || size > UINT64_C(0x10000000000) || (size & 4095)) goto done;
- #else
- 	device = mdevlookup(0);
- 	if (device == NODEV || mdevgetrange(0, &base, &size) || base < VM_MIN_KERNEL_ADDRESS ||
 --- a/bsd/kern/sys_generic.c
 +++ b/bsd/kern/sys_generic.c
 @@ -672,6 +672,8 @@
@@ -65,4 +54,3 @@
 +	if (segflg == UIO_USERSPACE) umi_user_path_observe(3, path, error, fd);
  	return error;
  }
- 
