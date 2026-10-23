@@ -47,7 +47,7 @@
  		return error;
  	}
  	dvp = nd.ni_dvp;
-@@ -9859,6 +9863,7 @@
+@@ -9859,5 +9863,6 @@
  		vnode_put(dvp);
  	}
  
