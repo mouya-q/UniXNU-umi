@@ -51,6 +51,17 @@ def main():
     records = []
     for name, commit, tag, prefix in SOURCES:
         source = ROOT / "refer" / name
+        if not (source / ".git").is_dir():
+            subprocess.run(
+                ["git", "clone", "--depth", "1", "--no-checkout",
+                 "https://github.com/apple-oss-distributions/xnu.git", str(source)],
+                check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "fetch", "--depth", "1", "origin", commit],
+                check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "checkout", "--detach", commit],
+                check=True)
         head = subprocess.check_output(
             ["git", "-C", source, "rev-parse", "HEAD"], text=True).strip()
         if head != commit:
