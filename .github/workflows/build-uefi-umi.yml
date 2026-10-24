@@ -1,0 +1,167 @@
+name: Build umi UEFI firmware
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - '.github/workflows/build-uefi-umi.yml'
+      - 'ci/**'
+  pull_request:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+env:
+  CI_BUILD: true
+  UEFI_REPO: mouya-q/uefi-umi
+  UNIXNU_REPO: mouya-q/UniXNU
+
+jobs:
+  build-uefi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout UniXNU-umi (device board)
+        uses: actions/checkout@v4
+
+      - name: Checkout uefi-umi (with submodules)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UEFI_REPO }}
+          path: uefi-umi
+          submodules: recursive
+
+      - name: Checkout UniXNU framework
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UNIXNU_REPO }}
+          path: UniXNU
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential lld nasm uuid-dev \
+            gcc-aarch64-linux-gnu python3 python3-pip python3-venv \
+            git mono-devel gettext locales gnupg ca-certificates \
+            clang llvm curl device-tree-compiler mtools
+
+      - name: Install Python requirements
+        working-directory: uefi-umi
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r pip-requirements.txt
+
+      - name: Export toolchain prefix
+        run: |
+          echo "CLANGPDB_AARCH64_PREFIX=aarch64-linux-gnu-" >> $GITHUB_ENV
+
+      - name: Stage UniXNUPkg and DarwinBootPkg into uefi-umi tree
+        run: |
+          # umi.dsc references UniXNUPkg/* and DarwinBootPkg/* which
+          # originate from the UniXNU framework repository. Copy them
+          # into the uefi-umi tree so EDK2 can resolve all package paths.
+          cp -r UniXNU/package/UniXNUPkg uefi-umi/UniXNUPkg
+          cp -r UniXNU/drivers/DarwinBoot/DarwinBootPkg uefi-umi/DarwinBootPkg
+
+      - name: Create umi DeviceBuild.py
+        working-directory: uefi-umi/Platforms/Xiaomi/umiPkg
+        run: |
+          # umiPkg lacks DeviceBuild.py which the stuart/EDK2 build system requires.
+          # Derive from the SM8250 sibling cepheusPkg (same KonaPkg base include).
+          cp ../cepheusPkg/DeviceBuild.py ./DeviceBuild.py
+          sed -i 's/cepheus/umi/g' ./DeviceBuild.py
+          sed -i 's/cepheusPkg/umiPkg/g' ./DeviceBuild.py
+          sed -i 's/HanaPkg/KonaPkg/g' ./DeviceBuild.py
+          # umi.dsc uses BUILD_TARGETS = DEBUG only
+          sed -i 's/"RELEASE", "DEBUG"/"DEBUG"/g' ./DeviceBuild.py
+          # Add UniXNUPkg and DarwinBootPkg to PackagesPath
+          sed -i 's|PackagesPath = (|PackagesPath = (\n        "UniXNUPkg",\n        "DarwinBootPkg",|' ./DeviceBuild.py
+
+      - name: Stuart setup
+        working-directory: uefi-umi/Platforms/Xiaomi/umiPkg
+        run: |
+          python3 DeviceBuild.py --setup -t DEBUG
+
+      - name: Stuart update
+        working-directory: uefi-umi/Platforms/Xiaomi/umiPkg
+        run: |
+          python3 DeviceBuild.py --update -t DEBUG
+
+      - name: Apply Mu_Basecore patches
+        working-directory: uefi-umi
+        run: |
+          cd Mu_Basecore
+          # Standard patches (applied by build_uefi.py in normal flow)
+          for patch in \
+            AsmMacroLib Auth-Service Boot-Manager Timer Usb-Bus; do
+            git apply ../Resources/MuPatches/${patch}.patch
+            echo "Applied: $patch"
+          done
+          # umi-specific patches from board.toml [firmware].patches
+          # Gic-Spurious: mask spurious GIC interrupts (ArmPkg)
+          git apply ../Resources/MuPatches/Gic-Spurious.patch
+          echo "Applied: Gic-Spurious"
+          # Display-Services-Trace: DXE dispatch trace + DisplayDxe instrumentation
+          # (supersedes Dxe-Trace which is a strict subset)
+          git apply ../Resources/MuPatches/Display-Services-Trace.patch
+          echo "Applied: Display-Services-Trace"
+          # Mac-Bash3 is macOS-only (bash 3.2 compat), skip on Linux
+          # Dxe-Trace is a subset of Display-Services-Trace, skip
+
+      - name: Compile BootShim
+        working-directory: uefi-umi/BootShim
+        run: |
+          make \
+            REQUIRES_KERNEL_HEADER=1 \
+            FD_BASE=0x9fc00000 \
+            FD_SIZE=0x300000
+
+      - name: Build UEFI FD
+        working-directory: uefi-umi/Platforms/Xiaomi/umiPkg
+        run: |
+          python3 DeviceBuild.py \
+            TARGET=DEBUG \
+            ENABLE_SECUREBOOT=0 \
+            FD_BASE=0x9fc00000 \
+            FD_SIZE=0x300000 \
+            FD_BLOCKS=$((0x300000 / 0x1000)) \
+            DEVICE_MODEL=0
+
+      - name: Verify FD output
+        run: |
+          FD_PATH="uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd"
+          if [ ! -f "$FD_PATH" ]; then
+            echo "ERROR: FD not found at $FD_PATH"
+            find uefi-umi/Build -name "*.fd" -o -name "*.FD" 2>/dev/null || true
+            ls -la uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/FV/ 2>/dev/null || true
+            exit 1
+          fi
+          echo "FD size: $(stat -c %s "$FD_PATH") bytes"
+          sha256sum "$FD_PATH"
+
+      - name: Upload UEFI FD
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-uefi-fd
+          path: uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd
+          compression-level: 9
+
+      - name: Upload BootShim
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-bootshim
+          path: |
+            uefi-umi/BootShim/BootShim.elf
+            uefi-umi/BootShim/BootShim.bin
+          compression-level: 9
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-uefi-build-logs
+          path: |
+            uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/*.log
+            uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/*.txt
+          compression-level: 9
