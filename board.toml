@@ -8,6 +8,11 @@ kit = "umi"
 
 [kernel]
 defconfig = "umi_defconfig"
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-libpthread-kernel.py",
+]
 
 # Minimal security bring-up closure, not a storage or userland configuration.
 # Build its source input with --crypto-bootstrap prelinked before prelinking.
