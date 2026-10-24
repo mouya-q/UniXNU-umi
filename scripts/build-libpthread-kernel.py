@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Build the matching Darwin 23 pthread component against umi's bootstrap kernel.
-
-From UniXNU 7b52e7968c76453cdc18b5aa174fc368d5293b91; only the symbol-survey
-kernel path differs from the upstream historical checkpoint.
-"""
+"""Build the matching Darwin 23 pthread kernel component and its real registration."""
 import json
 from pathlib import Path
 import struct
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from xnu_symbols import kernel_names
 SOURCE = ROOT / 'refer/libpthread'
 REVISION = 'c0e60fb5ecfc54cf379c261d3f9572cc22ded891'
 if subprocess.check_output(['git', '-C', SOURCE, 'rev-parse', 'HEAD'], text=True).strip() != REVISION:
@@ -88,8 +87,7 @@ for source in sources:
     destination = OUT / (source.stem + '.o')
     compile_one(source, destination)
     objects.append(destination)
-kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
-kernel_names = names(kernel, '-U', global_only=False)
+kernel_names = kernel_names(ROOT, global_only=False)
 definitions = set().union(*(names(path, '-U') for path in objects))
 collisions = definitions & kernel_names
 if collisions:
