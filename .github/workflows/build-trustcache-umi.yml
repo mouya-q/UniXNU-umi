@@ -1,0 +1,81 @@
+name: Build umi trust cache bundle
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - '.github/workflows/build-trustcache-umi.yml'
+      - 'board.toml'
+      - 'bringup/tools/prepare_umi_trustcache.py'
+      - 'scripts/fetch-ipsw-members.py'
+  pull_request:
+    types: [opened, reopened]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Upload the bundle as a CI artifact (needed to feed macos.yml trust_cache_url)
+        type: boolean
+        default: false
+      ipsw_url:
+        description: Override the IPSW URL from board.toml [ipsw].url
+        type: string
+        default: ""
+jobs:
+  build-trustcache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CI_BUILD: true
+    steps:
+      - name: Checkout UniXNU-umi (device board)
+        uses: actions/checkout@v4
+
+      - name: Install Python requirements
+        run: |
+          python3 -m pip install --upgrade pip
+
+      - name: Fetch the IPSW members needed for the trust cache
+        id: fetch
+        env:
+          OVERRIDE_URL: ${{ inputs.ipsw_url }}
+        run: |
+          if [ -n "$OVERRIDE_URL" ]; then
+            echo "::add-mask::$OVERRIDE_URL"
+            python3 scripts/fetch-ipsw-members.py \
+              "StaticTrustCache" "Cryptex1,SystemTrustCache" "$OVERRIDE_URL" || \
+              { echo "::error::failed to fetch IPSW members"; exit 1; }
+          else
+            python3 scripts/fetch-ipsw-members.py \
+              "StaticTrustCache" "Cryptex1,SystemTrustCache" || \
+              { echo "::error::failed to fetch IPSW members"; exit 1; }
+          fi
+
+      - name: Build the trust cache bundle
+        id: bundle
+        run: |
+          python3 bringup/tools/prepare_umi_trustcache.py || \
+            { echo "::error::failed to build the trust cache bundle"; exit 1; }
+          BUNDLE=out/umi/trustcache/original-static-system.bundle
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+          echo "bundle_sha256=$(sha256sum "$BUNDLE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "bundle_bytes=$(stat -c%s "$BUNDLE")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the bundle against the expected hash
+        run: |
+          EXPECTED="7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7"
+          ACTUAL=$(sha256sum out/umi/trustcache/original-static-system.bundle | cut -d' ' -f1)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::trust cache bundle hash mismatch: expected $EXPECTED, got $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: trust cache bundle matches the expected sha256"
+
+      - name: Upload the trust cache bundle
+        if: ${{ inputs.upload == true }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: unixnu-umi-trustcache-${{ github.run_attempt }}
+          path: |
+            out/umi/trustcache/original-static-system.bundle
+            out/umi/trustcache/inputs.json
+            out/umi-xnu/ipsw/*/fetch.json
+          retention-days: 7
