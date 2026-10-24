@@ -6,7 +6,7 @@ from pathlib import Path
 import plistlib
 import struct
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 sha=lambda b:hashlib.sha256(b).hexdigest()
 
 
@@ -50,7 +50,7 @@ def main():
         inputs[str(source.relative_to(ROOT))]={"sha256":sha(data),"module_sha256":wanted,"entries":entries}
     bundle=struct.pack("<3I",2,12,12+len(modules[0]))+b"".join(modules)
     assert sha(bundle)=="7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7"
-    out=ROOT/"out/umi/trustcache";out.mkdir(exist_ok=True)
+    out=ROOT/"out/umi/trustcache";out.mkdir(parents=True, exist_ok=True)
     target=out/"original-static-system.bundle";target.write_bytes(bundle)
     report={"bundle":str(target),"bundle_sha256":sha(bundle),"bytes":len(bundle),"inputs":inputs,
             "modules_modified":False,"own_entries_added":False,
