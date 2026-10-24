@@ -12,6 +12,8 @@ archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
   "build-libpthread-kernel.py",
+  "build-umi-arm-driver.py ArmDTPlatform",
+  "build-umi-arm-driver.py ArmCpu",
 ]
 
 # Minimal security bring-up closure, not a storage or userland configuration.
