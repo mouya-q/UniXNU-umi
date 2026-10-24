@@ -49,10 +49,16 @@ Apple 组件、厂商固件、Data 种子和设备转储均不包含在仓库中
 - `scripts/`、`patches/`：ADT、构建及内核适配。
 - `package/`：PMGR 服务、UFS/SMMU、Data、显示、诊断及 ST FTS/HID。
 - `overlay/`、`menu/`：固件和菜单的生成输入；固件仓库保留已组装的继承显示、实体键和 RAM 负载配置。
-- `bringup/tools/`、`bringup/tests/`：主机构建、日志解码和故障注入检查。
-- `docs/`：当前验证结果和构建限制。
+- `bringup/tools/`、`bringup/tests/`：主机构建、日志解码、故障注入检查和 trust cache 打包。
+- `docs/`：构建说明（含 [trust cache 打包](docs/BUILD.md)）、当前验证结果和构建限制。
 
 完整系统构建仍依赖本地生成的 ABI、策略、镜像身份和硬件采集记录，尚不是干净克隆后的一键安装流程。
+
+**Trust cache 打包**：payload 步骤所需的 trust cache bundle 在本仓库内生成
+（`scripts/fetch-ipsw-members.py` + `bringup/tools/prepare_umi_trustcache.py`），
+并由 `Build umi trust cache bundle` CI workflow 发布为 artifact。该 artifact 的下载链接
+即为上游 `macos.yml` 的 `trust_cache_url` 参数值；IPSW 本身不会被完整下载，
+仅通过 HTTP range 请求读取 `BuildManifest.plist` 与两个 `*.dmg.trustcache` 成员。
 当前触控已接入 GPI DMA I²C、三次 GPIO 复位、只读模组身份读取及 HID 有效位／集合派发。
 常开电源修复见 [138d6cb](https://github.com/reAAAq/UniXNU-umi/commit/138d6cb)，
 源码对照和测试过程见[原生驱动审计](docs/TOUCH_NATIVE_AUDIT.md)。
