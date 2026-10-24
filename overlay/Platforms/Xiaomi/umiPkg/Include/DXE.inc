@@ -40,13 +40,10 @@
   # Attempt 05 confirmed DisplayDxe returns Success without HALIOMMU.
   INF Binaries/umi/QcomPkg/Drivers/ULogDxe/ULogDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/CmdDbDxe/CmdDbDxe.inf
-  INF Binaries/umi/QcomPkg/Drivers/PwrUtilsDxe/PwrUtilsDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/NpaDxe/NpaDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/RpmhDxe/RpmhDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/PdcDxe/PdcDxe.inf
-  INF Binaries/umi/QcomPkg/Drivers/VcsDxe/VcsDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/ClockDxe/ClockDxe.inf
-  INF Binaries/umi/QcomPkg/Drivers/SPIDxe/SPIDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/I2CDxe/I2CDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/SPMIDxe/SPMIDxe.inf
   INF Binaries/umi/QcomPkg/Drivers/TLMMDxe/TLMMDxe.inf
