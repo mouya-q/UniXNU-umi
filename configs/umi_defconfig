@@ -1,6 +1,7 @@
 # Xiaomi Mi 10 / SM8250: initial source-kernel configuration.
 # Early kernel entry/MMU/arm_vm_init verified on 2026-10-20; bring-up continues.
 # ArmCpu requires a source crypto provider and ArmDTPlatform.
+CONFIG_XNU_BUILD_ARCHIVES=y
 CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_SOURCE_PTHREAD=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
