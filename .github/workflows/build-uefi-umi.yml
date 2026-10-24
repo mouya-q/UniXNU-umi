@@ -31,11 +31,19 @@ jobs:
           path: uefi-umi
           submodules: recursive
 
-      - name: Checkout UniXNU framework
+      - name: Checkout UniXNU framework (without submodules)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.UNIXNU_REPO }}
           path: UniXNU
+
+      - name: Clone DarwinBoot submodule
+        run: |
+          # drivers/DarwinBoot is a git submodule pointing to UniXNU/DarwinBoot.
+          # We only need this one submodule, so clone it directly instead of
+          # initialising all 15+ UniXNU submodules.
+          git clone --depth 1 https://github.com/UniXNU/DarwinBoot.git \
+            UniXNU/drivers/DarwinBoot
 
       - name: Install build dependencies
         run: |
@@ -56,13 +64,21 @@ jobs:
         run: |
           echo "CLANGPDB_AARCH64_PREFIX=aarch64-linux-gnu-" >> $GITHUB_ENV
 
-      - name: Stage UniXNUPkg and DarwinBootPkg into uefi-umi tree
+      - name: Stage UniXNUPkg, DarwinBootPkg, and overlays into uefi-umi tree
         run: |
-          # umi.dsc references UniXNUPkg/* and DarwinBootPkg/* which
-          # originate from the UniXNU framework repository. Copy them
-          # into the uefi-umi tree so EDK2 can resolve all package paths.
+          # 1) UniXNUPkg — from UniXNU/package/ (real directory, not submodule)
           cp -r UniXNU/package/UniXNUPkg uefi-umi/UniXNUPkg
+
+          # 2) DarwinBootPkg — from DarwinBoot submodule (cloned in previous step)
           cp -r UniXNU/drivers/DarwinBoot/DarwinBootPkg uefi-umi/DarwinBootPkg
+
+          # 3) umi-specific PackedRamdisk.h (custom packed ramdisk header)
+          cp package/darwinboot/PackedRamdisk.h \
+             uefi-umi/DarwinBootPkg/Driver/PackedRamdisk.h
+
+          # 4) Stage umi overlay files (BootShim, Platforms, Resources, Silicon)
+          #    These are umi-specific files overlaid onto the uefi-umi checkout.
+          cp -r overlay/* uefi-umi/
 
       - name: Create umi DeviceBuild.py
         working-directory: uefi-umi/Platforms/Xiaomi/umiPkg
@@ -72,8 +88,7 @@ jobs:
           cp ../cepheusPkg/DeviceBuild.py ./DeviceBuild.py
           sed -i 's/cepheus/umi/g' ./DeviceBuild.py
           sed -i 's/cepheusPkg/umiPkg/g' ./DeviceBuild.py
-          sed -i 's/HanaPkg/KonaPkg/g' ./DeviceBuild.py
-          # umi.dsc uses BUILD_TARGETS = DEBUG only
+          # umi.dsc already targets DEBUG only
           sed -i 's/"RELEASE", "DEBUG"/"DEBUG"/g' ./DeviceBuild.py
           # Add UniXNUPkg and DarwinBootPkg to PackagesPath
           sed -i 's|PackagesPath = (|PackagesPath = (\n        "UniXNUPkg",\n        "DarwinBootPkg",|' ./DeviceBuild.py
@@ -165,3 +180,4 @@ jobs:
             uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/*.log
             uefi-umi/Build/umiPkg/DEBUG_CLANGPDB/*.txt
           compression-level: 9
+          if-no-files-found: warn
