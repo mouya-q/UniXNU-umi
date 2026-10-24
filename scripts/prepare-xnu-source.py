@@ -66,16 +66,17 @@ def main():
             ["git", "-C", source, "rev-parse", "HEAD"], text=True).strip()
         if head != commit:
             raise SystemExit(f"Unexpected header source revision: {name}: {head}")
-        headers = sorted(source.rglob("*.h"))
+        prefix_dir = source / prefix
+        headers = sorted(prefix_dir.rglob("*.h"))
         if not headers:
-            raise SystemExit(f"Missing pinned headers: {source}")
+            raise SystemExit(f"Missing pinned headers: {prefix_dir}")
         for header in headers:
             relative = header.relative_to(source)
-            git_path = f"{prefix}/{relative.as_posix()}"
+            git_path = relative.as_posix()
             data = subprocess.check_output(["git", "-C", source, "show", f"HEAD:{git_path}"])
             if header.read_bytes() != data:
                 raise SystemExit(f"Modified reference header: {header}")
-            target = ROOT / ".cache/xnu-work" / git_path
+            target = ROOT / ".cache/xnu-work" / prefix / git_path
             existed = target.exists()
             if not existed:
                 target.parent.mkdir(parents=True, exist_ok=True)
