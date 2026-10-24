@@ -3,9 +3,6 @@
 
 Apple source, generated headers and objects remain ignored. This does not
 register the provider, produce a certified module or demonstrate a kernel boot.
-
-From UniXNU 7b52e7968c76453cdc18b5aa174fc368d5293b91. Resolve the feed
-symlink before checking that each source remains inside the reference tree.
 """
 import concurrent.futures
 import argparse
@@ -17,7 +14,9 @@ import struct
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / 'refer/corecrypto-2023').resolve()
+sys.path.insert(0, str(ROOT / 'scripts'))
+from xnu_symbols import kernel_names
+SOURCE = ROOT / 'refer/corecrypto-2023'
 REVISION = '11fba65b12d8830630e248dfa8344caf8b065f26'
 OUT = ROOT / 'build/corecrypto-2023'
 parser = argparse.ArgumentParser(description=__doc__)
@@ -58,7 +57,7 @@ phase = next(objects[key] for key in target['buildPhases'] if objects[key]['isa'
 sources = [resolve(objects[key]['fileRef']) for key in phase['files']
            if objects[objects[key]['fileRef']].get('path', '').endswith('.c')]
 for source in sources:
-    if not source.is_file() or not source.resolve().is_relative_to(SOURCE):
+    if not source.is_file() or not source.resolve().is_relative_to(SOURCE.resolve()):
         raise SystemExit(f'Missing or unexpected source path: {source}')
 include = OUT / 'include/corecrypto'
 include.mkdir(parents=True, exist_ok=True)
@@ -78,13 +77,12 @@ command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-target', 'arm64-apple-ios17.
            '-I' + str(include.parent), '-I' + str(framework / 'PrivateHeaders'), '-I' + str(framework / 'Headers')]
 for folder in sorted({h.parent for h in SOURCE.rglob('*.h') if 'test' not in str(h.relative_to(SOURCE)).lower()}):
     command.extend(['-I', str(folder)])
-kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
 variant = '-namespaced' if args.namespace else ''
 if args.namespace:
     plain = OUT / 'libcorecrypto_kernel_noasm.a'
     if not plain.is_file():
         raise SystemExit('Build the plain provider once before creating its namespace')
-    collisions = sorted(names(plain, '-U') & names(kernel, '-U'))
+    collisions = sorted(names(plain, '-U') & kernel_names(ROOT))
     if any(not name[1:].isidentifier() for name in collisions):
         raise SystemExit('A colliding symbol cannot be namespaced with a C identifier')
     header = OUT / 'namespace.h'
@@ -139,7 +137,7 @@ archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, *[object_dir / result['object'] for result in results]], check=True)
 defined = names(archive, '-U')
 undefined = names(archive, '-u') - defined
-kernel_exports = names(kernel, '-U')
+kernel_exports = kernel_names(ROOT)
 survey = {'unresolved_external_names': sorted(undefined), 'missing_kernel_names': sorted(undefined - kernel_exports),
           'duplicate_kernel_names': sorted(defined & kernel_exports), 'provider_registered': False,
           'abi_compatibility_proven': False}
