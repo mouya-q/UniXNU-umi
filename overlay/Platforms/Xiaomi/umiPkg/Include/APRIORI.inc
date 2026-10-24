@@ -41,16 +41,14 @@ APRIORI DXE {
   INF Binaries/umi/QcomPkg/Drivers/ULogDxe/ULogDxe.inf
   # stock index 16: CmdDbDxe
   INF Binaries/umi/QcomPkg/Drivers/CmdDbDxe/CmdDbDxe.inf
-  # stock index 17: PwrUtilsDxe
-  INF Binaries/umi/QcomPkg/Drivers/PwrUtilsDxe/PwrUtilsDxe.inf
+  # stock index 17: PwrUtilsDxe -- omitted (umi-specific, not in cepheus binaries)
   # stock index 18: NpaDxe
   INF Binaries/umi/QcomPkg/Drivers/NpaDxe/NpaDxe.inf
   # stock index 19: RpmhDxe
   INF Binaries/umi/QcomPkg/Drivers/RpmhDxe/RpmhDxe.inf
   # stock index 20: PdcDxe
   INF Binaries/umi/QcomPkg/Drivers/PdcDxe/PdcDxe.inf
-  # stock index 21: VcsDxe
-  INF Binaries/umi/QcomPkg/Drivers/VcsDxe/VcsDxe.inf
+  # stock index 21: VcsDxe -- omitted (umi-specific, not in cepheus binaries)
   # stock index 22: ClockDxe
   INF Binaries/umi/QcomPkg/Drivers/ClockDxe/ClockDxe.inf
   # stock index 23: SPMI
@@ -69,8 +67,7 @@ APRIORI DXE {
   INF Binaries/umi/QcomPkg/Drivers/TzDxe/TzDxeLA.inf
   # stock index 37: VariableDxe
   INF MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf
-  # stock index 41: SPI
-  INF Binaries/umi/QcomPkg/Drivers/SPIDxe/SPIDxe.inf
+  # stock index 41: SPI -- omitted (umi-specific, not in cepheus binaries)
   # stock index 42: I2C
   INF Binaries/umi/QcomPkg/Drivers/I2CDxe/I2CDxe.inf
   # stock index 43: DisplayDxe
