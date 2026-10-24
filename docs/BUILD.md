@@ -87,6 +87,42 @@ device dumps are intentionally absent. The original one-device partition-write
 scripts are also absent: their serial and partition assumptions are not a
 general installer. Re-measure another handset before any partition operation.
 
+## Trust cache bundle
+
+The payload step accepts a trust cache bundle with `--trust-cache` (or an
+owner-signed one with `--owner-trust-cache`). The bundle is built entirely
+inside this repository; no IPSW member larger than a few hundred kilobytes is
+ever downloaded.
+
+```sh
+python3 scripts/fetch-ipsw-members.py StaticTrustCache Cryptex1,SystemTrustCache
+python3 bringup/tools/prepare_umi_trustcache.py
+```
+
+`scripts/fetch-ipsw-members.py` opens the IPSW URL of `board.toml [ipsw]` as a
+seekable HTTP-range stream (`RangeFile`) and resolves component names through
+`BuildManifest.plist`. Only `BuildManifest.plist` (749 KiB) and the two
+`*.dmg.trustcache` members (59,519 and 1,871 bytes) are fetched; the 6.37 GiB
+archive stays on Apple's CDN. Every member is checked against the pins of
+`board.toml [ipsw.sha256]` before it is used.
+
+`bringup/tools/prepare_umi_trustcache.py` reads the cached members, verifies the
+`j120ap` Erase build identity (`ApChipID 0x8011`, `ApBoardID 0x0C`), unpacks the
+DER/IM4P wrappers (`trst` and `trcs`), validates the module headers and entry
+counts, and writes `out/umi/trustcache/original-static-system.bundle`
+(61,356 bytes, SHA-256 `7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7`).
+The bundle header is `struct.pack("<3I", 2, 12, 12 + len(module0))` followed by
+the two modules; `modules_modified` and `own_entries_added` are both `false`.
+
+The CI workflow `.github/workflows/build-trustcache-umi.yml` runs the same two
+steps, asserts the expected SHA-256 and, when invoked with
+`workflow_dispatch.inputs.upload=true`, publishes the bundle as the
+`unixnu-umi-trustcache-<run_attempt>` artifact (7 day retention). Its download
+URL is the value to pass as `trust_cache_url` to UniXNU's `macos.yml` workflow.
+Do not modify the module contents or add entries. A modified bundle fails the
+payload step's `board.toml [payload]` allow-list and breaks the AMFI query that
+`bringup/tools/check_umi_trustcache_qemu.py` qualifies.
+
 ## Touch and log checks
 
 Attempt 80 uses `umi-fts-gpi=1` for native GPI DMA I²C. The startup path enables
