@@ -57,11 +57,11 @@ included in this repository.
 | Path | Contents |
 | --- | --- |
 | `board.toml`, `configs/`, `feeds.toml` | Board description and source baseline |
-| `scripts/`, `patches/` | ADT generation, kernel builds and platform/diagnostic patches |
+| `scripts/`, `patches/` | ADT generation, kernel builds, IPSW member fetch and platform/diagnostic patches |
 | `package/` | PMGR service, UFS/SMMU, persistent Data, display, diagnostics and ST FTS/HID |
 | `overlay/`, `menu/` | Firmware/menu staging sources used by the development builder |
-| `bringup/tools/`, `bringup/tests/` | Host build, decoding and fault-injection tools |
-| `docs/` | Build limitations and current hardware observation summary |
+| `bringup/tools/`, `bringup/tests/` | Host build, decoding, fault-injection and trust cache tools |
+| `docs/` | Build instructions, build limitations and current hardware observation summary |
 
 The UEFI repository contains the staged inherited-display/buttons/RAM-payload
 profile. `overlay/` is the input template used to regenerate that profile; they
@@ -80,6 +80,12 @@ The board geometry and high-memory window were measured on one handset. Do not
 reuse them on a different model or RAM/storage variant without revalidation.
 The tested installation replaces Android userdata; there is no general installer
 or partition-write tool in this repository. Preserve Recovery and backups.
+
+The trust cache bundle used by the payload step is built in this repository
+(`scripts/fetch-ipsw-members.py` + `bringup/tools/prepare_umi_trustcache.py`)
+and published by the `Build umi trust cache bundle` workflow. It is the only
+source of `trust_cache_url` for the upstream `macos.yml` workflow; the IPSW
+itself is never downloaded in full.
 
 ## Credits and license
 
