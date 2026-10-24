@@ -115,13 +115,20 @@ def fetch_members(url, members, build, sha256_pins, ipsw_config):
     Cryptex1,SystemTrustCache, KernelCache, ...) or a literal archive path.
     Component names are resolved through BuildManifest.plist so that the board
     is the single source of truth for the IPSW layout.
+    BuildManifest.plist is always fetched first, whether or not the caller asked
+    for it, because the device identity and the component-to-path map come from it.
     """
     cache = ROOT / 'out' / 'umi-xnu' / 'ipsw' / build
     cache.mkdir(parents=True, exist_ok=True)
 
     manifest_path = cache / 'BuildManifest.plist'
     if not manifest_path.is_file():
-        raise Error('BuildManifest.plist must be fetched first')
+        print(f'  fetching BuildManifest.plist (required for identity resolution) ...', end=' ')
+        remote = RangeFile(url)
+        with zipfile.ZipFile(remote) as zf:
+            data = zf.read('BuildManifest.plist')
+        manifest_path.write_bytes(data)
+        print(f'ok ({hashlib.sha256(data).hexdigest()[:16]}...)')
     manifest = plistlib.loads(manifest_path.read_bytes())
 
     identity = None
