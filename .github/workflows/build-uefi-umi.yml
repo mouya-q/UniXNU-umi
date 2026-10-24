@@ -117,12 +117,15 @@ jobs:
           # Gic-Spurious: mask spurious GIC interrupts (ArmPkg)
           git apply ../Resources/MuPatches/Gic-Spurious.patch
           echo "Applied: Gic-Spurious"
+          # Dxe-Trace: adds UMI DXE start/done DEBUG lines (prerequisite for
+          # Display-Services-Trace, which references these lines as context)
+          git apply ../Resources/MuPatches/Dxe-Trace.patch
+          echo "Applied: Dxe-Trace"
           # Display-Services-Trace: DXE dispatch trace + DisplayDxe instrumentation
-          # (supersedes Dxe-Trace which is a strict subset)
+          # (builds on top of Dxe-Trace, adding BS/RT/DS trace wrappers)
           git apply ../Resources/MuPatches/Display-Services-Trace.patch
           echo "Applied: Display-Services-Trace"
           # Mac-Bash3 is macOS-only (bash 3.2 compat), skip on Linux
-          # Dxe-Trace is a subset of Display-Services-Trace, skip
 
       - name: Compile BootShim
         working-directory: uefi-umi/BootShim
