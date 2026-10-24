@@ -76,15 +76,14 @@ def main():
             data = subprocess.check_output(["git", "-C", source, "show", f"HEAD:{git_path}"])
             if header.read_bytes() != data:
                 raise SystemExit(f"Modified reference header: {header}")
-            install_path = f"{prefix}/{git_path}"
-            target = ROOT / ".cache/xnu-work" / install_path
+            target = ROOT / ".cache/xnu-work" / git_path
             existed = target.exists()
             if not existed:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
             # Like upstream, retain any header already present in the XNU work tree.
             records.append({
-                "name": install_path, "source_tag": tag, "source_commit": commit,
+                "name": git_path, "source_tag": tag, "source_commit": commit,
                 "git_blob": hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest(),
                 "sha256": hashlib.sha256(data).hexdigest(),
                 "installed_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
