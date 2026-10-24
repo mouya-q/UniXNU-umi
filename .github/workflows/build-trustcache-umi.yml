@@ -29,9 +29,10 @@ jobs:
       - name: Checkout UniXNU-umi (device board)
         uses: actions/checkout@v4
 
-      - name: Install Python requirements
+      - name: Check the Python toolchain
         run: |
-          python3 -m pip install --upgrade pip
+          python3 --version
+          for tool in python3 curl sha256sum; do command -v "$tool" || { echo "::error::missing $tool"; exit 1; }; done
 
       - name: Fetch the IPSW members needed for the trust cache
         id: fetch
