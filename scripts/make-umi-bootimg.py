@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Assemble a complete Android boot image for `fastboot boot` (temporary boot,
+Assemble a complete Android boot image v1 for `fastboot boot` (temporary boot,
 no partition write). The image contains:
 
   kernel  = gzip(BootShim.bin + SILICIUM_UEFI.fd)
@@ -10,6 +10,9 @@ After `fastboot boot umi-xnu-boot.img`, ABL loads the kernel to kernel_addr,
 the ramdisk to ramdisk_addr (0xA0000000), and records linux,initrd-start/end
 in the DTB /chosen. UmiRamPayloadDxe reads those values to find the FAT32
 volume in RAM. Reboot returns to Android — nothing was flashed.
+
+Boot image header conforms to AOSP boot_img_hdr_v1 definition:
+  https://android.googlesource.com/platform/system/tools/mkbootimg/+refs/heads/master/include/bootimg/bootimg.h
 
 usage: make-umi-bootimg.py [--bootshim PATH] [--uefi-fd PATH]
                            [--payload PATH] [--output PATH]
@@ -24,10 +27,26 @@ from pathlib import Path
 
 # Memory map constants (must match UmiRamPayloadDxe and board.toml)
 PAGE_SIZE = 4096
-KERNEL_ADDR = 0x10008000      # board.toml kernel_offset
+KERNEL_ADDR = 0x10008000      # board.toml kernel_offset (base 0x10000000 + 0x8000)
 RAMDISK_ADDR = 0xA0000000     # UmiRamPayloadDxe BOOT_BASE
 SECOND_ADDR = 0x00000000
 ANDROID_MAGIC = b'ANDROID!'
+
+# AOSP boot_img_hdr_v1 struct size.
+# v0 fields: 1632 bytes (magic + sizes/addrs + os_version + name + cmdline +
+#             id + extra_cmdline).  v1 adds recovery_dtbo_size(4) +
+#             recovery_dtbo_addr(8) + header_size(4) = 16 bytes.
+# Total v1 struct = 1648 bytes = 0x670.
+HEADER_SIZE_V1 = 1648           # 0x670
+
+# FAT32 payload invariants (must match payload.img from CI Run #25)
+EXPECTED_PAYLOAD_SIZE = 67108864   # 64 MiB
+EXPECTED_TRUSTCACHE_SHA256 = "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7"
+TRUSTCACHE_FAT_PATH = "::/EFI/UniXNU/Payloads/kernel.macho.trustcache"
+
+# Kernel decompressed invariants
+EXPECTED_BOOTSHIM_SIZE = 304
+EXPECTED_UEFI_FD_SIZE = 3145728   # 3 MiB
 
 
 def sha256(data: bytes) -> str:
@@ -49,19 +68,19 @@ def build_boot_image(bootshim: bytes, uefi_fd: bytes, payload: bytes) -> bytes:
     # Build header (v1, padded to one page)
     header = bytearray(PAGE_SIZE)
     header[0:8] = ANDROID_MAGIC
-    struct.pack_into('<I', header, 8, kernel_size)
-    struct.pack_into('<I', header, 12, KERNEL_ADDR)
-    struct.pack_into('<I', header, 16, ramdisk_size)
-    struct.pack_into('<I', header, 20, RAMDISK_ADDR)
-    struct.pack_into('<I', header, 24, 0)              # second_size
-    struct.pack_into('<I', header, 28, SECOND_ADDR)     # second_addr
-    struct.pack_into('<I', header, 32, 0)               # tags_addr (no DTB in image)
-    struct.pack_into('<I', header, 36, PAGE_SIZE)
-    struct.pack_into('<I', header, 40, 1)               # header_version
-    # v1 fields at offset 1632+
-    struct.pack_into('<I', header, 1632, 0)              # recovery_dtbo_size
-    struct.pack_into('<Q', header, 1636, 0)              # recovery_dtbo_addr
-    struct.pack_into('<I', header, 1644, PAGE_SIZE)      # header_size
+    struct.pack_into('<I', header, 8, kernel_size)        # kernel_size
+    struct.pack_into('<I', header, 12, KERNEL_ADDR)       # kernel_addr
+    struct.pack_into('<I', header, 16, ramdisk_size)      # ramdisk_size
+    struct.pack_into('<I', header, 20, RAMDISK_ADDR)      # ramdisk_addr
+    struct.pack_into('<I', header, 24, 0)                 # second_size
+    struct.pack_into('<I', header, 28, SECOND_ADDR)       # second_addr
+    struct.pack_into('<I', header, 32, 0)                 # tags_addr (no DTB appended)
+    struct.pack_into('<I', header, 36, PAGE_SIZE)         # page_size
+    struct.pack_into('<I', header, 40, 1)                 # header_version
+    # v1 additional fields start at offset 1632
+    struct.pack_into('<I', header, 1632, 0)               # recovery_dtbo_size
+    struct.pack_into('<Q', header, 1636, 0)               # recovery_dtbo_addr
+    struct.pack_into('<I', header, 1644, HEADER_SIZE_V1)  # header_size = 0x670
 
     image = bytearray(total_size)
     image[0:PAGE_SIZE] = header
@@ -73,36 +92,85 @@ def build_boot_image(bootshim: bytes, uefi_fd: bytes, payload: bytes) -> bytes:
 
 
 def verify_boot_image(img: bytes, bootshim: bytes, uefi_fd: bytes, payload: bytes):
-    """Round-trip verify the assembled boot image."""
-    assert img[:8] == ANDROID_MAGIC, "bad magic"
-    ks = struct.unpack_from('<I', img, 8)[0]
-    rs = struct.unpack_from('<I', img, 16)[0]
-    ps = struct.unpack_from('<I', img, 36)[0]
-    hv = struct.unpack_from('<I', img, 40)[0]
-    ra = struct.unpack_from('<I', img, 20)[0]
+    """Round-trip verify the assembled boot image against AOSP v1 spec."""
+    # --- Header field validation ---
+    assert img[:8] == ANDROID_MAGIC, f"bad magic: {img[:8]!r}"
 
-    assert ps == PAGE_SIZE, f"page_size mismatch: {ps}"
+    ks = struct.unpack_from('<I', img, 8)[0]       # kernel_size
+    ka = struct.unpack_from('<I', img, 12)[0]      # kernel_addr
+    rs = struct.unpack_from('<I', img, 16)[0]      # ramdisk_size
+    ra = struct.unpack_from('<I', img, 20)[0]      # ramdisk_addr
+    ss = struct.unpack_from('<I', img, 24)[0]      # second_size
+    sa = struct.unpack_from('<I', img, 28)[0]      # second_addr
+    ta = struct.unpack_from('<I', img, 32)[0]      # tags_addr
+    ps = struct.unpack_from('<I', img, 36)[0]      # page_size
+    hv = struct.unpack_from('<I', img, 40)[0]      # header_version
+    rds = struct.unpack_from('<I', img, 1632)[0]   # recovery_dtbo_size
+    rda = struct.unpack_from('<Q', img, 1636)[0]   # recovery_dtbo_addr
+    hs = struct.unpack_from('<I', img, 1644)[0]    # header_size
+
+    assert ps == PAGE_SIZE, f"page_size mismatch: {ps} != {PAGE_SIZE}"
     assert hv == 1, f"header_version mismatch: {hv}"
-    assert ra == RAMDISK_ADDR, f"ramdisk_addr mismatch: 0x{ra:x}"
+    assert hs == HEADER_SIZE_V1, (
+        f"header_size mismatch: {hs} (0x{hs:x}) != {HEADER_SIZE_V1} (0x{HEADER_SIZE_V1:x}). "
+        f"boot_img_hdr_v1 struct size must be 0x670 per AOSP definition."
+    )
+    assert ra == RAMDISK_ADDR, f"ramdisk_addr mismatch: 0x{ra:x} != 0x{RAMDISK_ADDR:x}"
+    assert ka == KERNEL_ADDR, f"kernel_addr mismatch: 0x{ka:x} != 0x{KERNEL_ADDR:x}"
+    assert ss == 0, f"second_size should be 0, got {ss}"
+    assert ta == 0, f"tags_addr should be 0 (no DTB appended), got 0x{ta:x}"
+    assert rds == 0, f"recovery_dtbo_size should be 0, got {rds}"
+    assert rda == 0, f"recovery_dtbo_addr should be 0, got 0x{rda:x}"
 
-    # Kernel decompress
+    # --- Total image size must be an exact page multiple ---
+    expected_total = PAGE_SIZE * (1 + (ks + ps - 1) // ps + (rs + ps - 1) // ps)
+    assert len(img) == expected_total, (
+        f"image size {len(img)} != expected {expected_total} "
+        f"(header + kernel pages + ramdisk pages)"
+    )
+    assert len(img) % ps == 0, f"image size {len(img)} not aligned to page_size {ps}"
+
+    # --- Kernel region: must start at page boundary, end within declared range ---
+    kernel_region = img[ps:ps + ks]
+    assert kernel_region[:2] == b'\x1f\x8b', (
+        f"kernel data does not start with gzip magic 0x1f8b, got {kernel_region[:2].hex()}"
+    )
+
+    # --- Kernel decompression: exact stream, no trailing garbage ---
     d = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    dc = d.decompress(img[PAGE_SIZE:PAGE_SIZE + ks])
-    assert dc[:len(bootshim)] == bootshim, "BootShim mismatch"
-    assert dc[len(bootshim):len(bootshim) + len(uefi_fd)] == uefi_fd, "UEFI FD mismatch"
+    dc = d.decompress(kernel_region)
+    unused = d.unused_data
+    assert len(unused) == 0, (
+        f"gzip stream has {len(unused)} trailing bytes after decompressed data"
+    )
+    expected_decompressed = len(bootshim) + len(uefi_fd)
+    assert len(dc) == expected_decompressed, (
+        f"decompressed kernel size {len(dc)} != expected {expected_decompressed} "
+        f"(BootShim {len(bootshim)} + UEFI FD {len(uefi_fd)})"
+    )
+    assert dc[:len(bootshim)] == bootshim, "BootShim bytes mismatch in decompressed kernel"
+    assert dc[len(bootshim):] == uefi_fd, "UEFI FD bytes mismatch in decompressed kernel"
 
-    # Ramdisk round-trip
+    # --- Ramdisk round-trip: exact byte-for-byte match ---
     k_pages = (ks + ps - 1) // ps
-    ro = PAGE_SIZE + k_pages * ps
+    ro = ps + k_pages * ps
+    ramdisk_end = ro + rs
+    assert ramdisk_end == len(img), (
+        f"ramdisk end 0x{ramdisk_end:x} != image end 0x{len(img):x}; "
+        f"trailing {len(img) - ramdisk_end} bytes after ramdisk"
+    )
     extracted = img[ro:ro + rs]
-    assert extracted == payload, "ramdisk payload mismatch"
+    assert extracted == payload, "ramdisk payload byte mismatch"
 
     return {
         "kernel_size": ks,
         "ramdisk_size": rs,
         "page_size": ps,
         "header_version": hv,
+        "header_size": hs,
+        "kernel_addr": ka,
         "ramdisk_addr": ra,
+        "tags_addr": ta,
         "ramdisk_offset": ro,
         "decompressed_kernel": len(dc),
         "sha256": sha256(img),
@@ -127,6 +195,17 @@ def main():
     uefi_fd = args.uefi_fd.read_bytes()
     payload = args.payload.read_bytes()
 
+    # Pre-build input validation
+    assert len(bootshim) == EXPECTED_BOOTSHIM_SIZE, (
+        f"BootShim size {len(bootshim)} != expected {EXPECTED_BOOTSHIM_SIZE}"
+    )
+    assert len(uefi_fd) == EXPECTED_UEFI_FD_SIZE, (
+        f"UEFI FD size {len(uefi_fd)} != expected {EXPECTED_UEFI_FD_SIZE}"
+    )
+    assert len(payload) == EXPECTED_PAYLOAD_SIZE, (
+        f"Payload size {len(payload)} != expected {EXPECTED_PAYLOAD_SIZE}"
+    )
+
     print(f"BootShim:    {len(bootshim):>10} bytes  ({args.bootshim})")
     print(f"UEFI FD:     {len(uefi_fd):>10} bytes  ({args.uefi_fd})")
     print(f"Payload:     {len(payload):>10} bytes  ({args.payload})")
@@ -136,13 +215,17 @@ def main():
 
     args.output.write_bytes(img)
 
-    print(f"\n=== Boot image v1 ===")
-    print(f"kernel_size:   {info['kernel_size']}")
-    print(f"ramdisk_size:  {info['ramdisk_size']}")
-    print(f"ramdisk_addr:  0x{info['ramdisk_addr']:08x}")
-    print(f"page_size:     {info['page_size']}")
-    print(f"total bytes:   {info['total_bytes']} ({info['total_bytes']/1024/1024:.1f} MB)")
-    print(f"sha256:        {info['sha256']}")
+    print(f"\n=== Boot image v1 (AOSP-conformant) ===")
+    print(f"kernel_size:     {info['kernel_size']}")
+    print(f"kernel_addr:     0x{info['kernel_addr']:08x}")
+    print(f"ramdisk_size:    {info['ramdisk_size']}")
+    print(f"ramdisk_addr:    0x{info['ramdisk_addr']:08x}")
+    print(f"page_size:       {info['page_size']}")
+    print(f"header_version:  {info['header_version']}")
+    print(f"header_size:     {info['header_size']} (0x{info['header_size']:x})")
+    print(f"tags_addr:       0x{info['tags_addr']:08x}")
+    print(f"total bytes:     {info['total_bytes']} ({info['total_bytes']/1024/1024:.1f} MB)")
+    print(f"sha256:          {info['sha256']}")
     print(f"\nOutput: {args.output}")
 
     print(f"\nUsage:")
