@@ -1,10 +1,28 @@
-/* Derived from uefi-sheng 329b473d BootShim.S; umi-only RAM trace.
- * UMI0: shim reached; UMI1: FD copied. x0/x1 handoff is preserved.
- * Only the reserved console header/data are changed; no pmsg or disk I/O.
+/* BootShim probe -- headless bring-up diagnostic.
+ *
+ * Strategy: paint the display white, wait 5 seconds, then PSCI SYSTEM_RESET.
+ * If the device self-reboots after ~5s, this code ran -> BootShim executed
+ * correctly and the hang is downstream in SEC.
+ * If the device stays frozen with no reboot, BootShim never executed ->
+ * the hang is in ABL load/decompression.
+ *
+ * The kernel header is preserved for ABL's gzip path compatibility.
+ * All probe parameters are hardcoded to avoid Makefile macro dependency.
+ *
+ * Original design: uefi-sheng BootShim.S / BootShimProbe.S.
+ * PSCI SYSTEM_RESET = 0x84000009 (ARM DEN 0022).
  */
+
+#define PSCI_SYSTEM_RESET 0x84000009
+
+/* Probe parameters -- hardcoded for umi (Mi 10, SM8250) */
+#define FB_BASE   0x9c000000   /* Display Reserved (MemoryMapLib.c) */
+#define FB_FILL   0x100000      /* 1 MiB -- fills ~1/35 of the 35 MiB region */
+#define PROBE_DELAY_S 5         /* seconds to show the white marker */
+
 _Head:
-  adr   x1, _Payload    /* Set _Entry address */
-  b     _Start          /* Jump to the real code */
+  adr   x1, _Payload
+  b     _Start
 
 #if REQUIRES_KERNEL_HEADER == 1
 _StackBase:
@@ -21,71 +39,45 @@ _StackSize:
 #endif
 
 _Start:
-  /* umi ramoops console header: confirmed in this kernel, ECC disabled. */
-  ldr   x12, =0xB0000000
-  ldr   w13, =0x43474244
-  str   w13, [x12]
-  ldr   w13, =0x30494d55
-  str   w13, [x12, #12]
-  mov   w13, #10
-  strb  w13, [x12, #16]
-  mov   w13, #5
-  str   w13, [x12, #4]
-  str   w13, [x12, #8]
-  dmb   sy
-  dc    cvac, x12
-  dsb   sy
-  mov   x4, x1
-  ldr   x5, =FD_BASE
-  cmp   x4, x5
-  beq   _Entry
-  ldr   x6,  =FD_SIZE
+  mov   x11, x1          /* save _Payload addr */
+  mov   x12, x0          /* save DT handoff (x0) */
 
-_CopyLoop:
-  ldp   x2, x3, [x4], #16
-  stp   x2, x3, [x5], #16
-  subs  x6, x6, #16
-  b.ne  _CopyLoop
-  ldr   x5, =FD_BASE
+  /* --- Step 1: Paint the top of the frame buffer white --- */
+  ldr   x0, =FB_BASE
+  ldr   x2, =FB_FILL
+  mov   x3, #-1           /* all-ones = white in every 32-bit RGB/BGR layout */
+_Paint:
+  stp   x3, x3, [x0], #16
+  subs  x2, x2, #16
+  b.ne  _Paint
+  dsb   sy
 
-_Entry:
-  /* umi ramoops console header: confirmed in this kernel, ECC disabled. */
-  ldr   x12, =0xB0000000
-  ldr   w13, =0x43474244
-  str   w13, [x12]
-  ldr   w13, =0x31494d55
-  str   w13, [x12, #12]
-  mov   w13, #10
-  strb  w13, [x12, #16]
-  mov   w13, #5
-  str   w13, [x12, #4]
-  str   w13, [x12, #8]
-  dmb   sy
-  dc    cvac, x12
-  dsb   sy
-  /* Publish the copied instructions before executing them. */
-  dsb   sy
-  mrs   x9, ctr_el0
-  ubfx  x9, x9, #16, #4
-  mov   x10, #4
-  lsl   x9, x10, x9
-  sub   x10, x9, #1
-  bic   x8, x5, x10
-  ldr   x7, =FD_SIZE
-  add   x7, x5, x7
-
-_CleanLoop:
-  dc    cvac, x8
-  add   x8, x8, x9
-  cmp   x8, x7
-  b.lo  _CleanLoop
-  dsb   sy
-  ic    iallu
-  dsb   sy
+  /* --- Step 2: Wait PROBE_DELAY_S seconds on the generic timer --- */
+  mrs   x4, cntfrq_el0
+  cbnz  x4, 1f
+  ldr   x4, =19200000     /* fallback: SM8250 timer frequency */
+1:
+  mov   x5, #PROBE_DELAY_S
+  mul   x4, x4, x5        /* target tick count = freq * seconds */
   isb
-  br    x5
+  mrs   x5, cntpct_el0
+  add   x4, x4, x5        /* target = now + delay */
+2:
+  isb
+  mrs   x5, cntpct_el0
+  cmp   x5, x4
+  b.lo  2b
 
+  /* --- Step 3: PSCI SYSTEM_RESET via SMC --- */
+  ldr   w0, =PSCI_SYSTEM_RESET
+  mov   x1, xzr
+  mov   x2, xzr
+  mov   x3, xzr
+  smc   #0
+
+  /* If SMC returns (shouldn't for SYSTEM_RESET), spin */
 _Dead:
+  wfe
   b     _Dead
 
 .text
