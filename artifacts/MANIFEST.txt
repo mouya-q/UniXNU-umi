@@ -1,0 +1,49 @@
+UniXNU-umi 源码及产物 MANIFEST
+================================
+Generated: 2025-10-25 (v4 — upstream-aligned: Image.gz-dtb + mkbootimg.py, DTB from live /sys/firmware/fdt)
+
+
+CI产物/TrustCache-Run6/fetch.json                                       508 bytes sha256=e54106c45b605ca5676097edad17cee884bdf192c8ba097e734b272c8c9e1ec3
+CI产物/TrustCache-Run6/inputs.json                                      906 bytes sha256=61eafb41d4d1eb4727aaf902bed0199cd69930ccef664d41eb022793e6c9879a
+CI产物/TrustCache-Run6/original-static-system.bundle                 61,356 bytes sha256=7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7
+CI产物/UEFI-Run15/BootShim.bin                                          304 bytes sha256=dc6262ba2c55d4ef2223f044bc93df3742c1ac2cbc54637e6cb7b6804c69f9d9
+CI产物/UEFI-Run15/BootShim.elf                                        1,088 bytes sha256=6477fcff61ed68b95e7b19d42f1e4b281d0fdcf434a3dbbbadc13a487f49bce8
+CI产物/UEFI-Run15/Mu-umi-0.img                                      729,088 bytes sha256=18718dac07c14d20ad882a0c484217355fd0a6c180477ea56006ad47052a050f
+CI产物/UEFI-Run15/SILICIUM_UEFI.fd                                3,145,728 bytes sha256=5d97afebd27e3a4d31e11f30f9c180add10393703ec8f738f0a1caeaa13e0766
+CI产物/XNU-Payload-Run25/mach.development.bcm2837                15,737,912 bytes sha256=b8ada2c3944364643d963f071b6269b6fb1ad1754f8e965119371afd343746d9
+CI产物/XNU-Payload-Run25/mach.development.bcm2837.unstripped     19,263,872 bytes sha256=a4df7ef0451211e128566ea1426260d8c880b0a3426341351b8ea7ccf71f8518
+CI产物/XNU-Payload-Run25/payload.img                             67,108,864 bytes sha256=f2cd62afa4a9f56d406177107da4816b4bcd7e724718d1db3e71e42fd3c90e76
+CI产物/XNU-Payload-Run25/payload.json                                   604 bytes sha256=ff336be23b941c3507e80ba3430d32491f04f0607fda3482abc02189014c031a
+CI产物/最终BootImage/umi-xnu-boot.img 68,784,128 bytes sha256=01ebd492bdfe7fa49683438d91683a1767d51bdfd0988ce4e9f9355c2fda0e68
+README.md                                                           3,949 bytes sha256=458b855f5038199bc48b97f7df7583ee1384fc37c519c3478a057a4d3f80695f
+源码/README.md                                                        6,201 bytes sha256=c60858982453647acef0ed93efefe21f28b49ade6f79b29649cc5667d402c6ba
+源码/README.zh-CN.md                                                  5,310 bytes sha256=522726412b6525430827e258af25101f49bf477528f4f277bfdcf445b9966006
+源码/board.toml                                                       4,852 bytes sha256=8b3fb3cf47a7d1491d9b4f43aa52bc48a694b5939274b7fdd0c3eb9919a2305b
+源码/bringup-tools/build_umi_uefi.py                                  9,069 bytes sha256=18308541dc8e7a5dbb324eac3b786c878c7c19643f23f349a932f3200e504d0e
+源码/bringup-tools/make_umi_payload.py                               14,728 bytes sha256=2a67095957a5f7c875d75dfb5572505daf7feb6f6ed33eb7cebbd7f07fd4f328
+源码/bringup-tools/prepare_umi_trustcache.py                          2,832 bytes sha256=067e384000399c97bdcb292a32270bc8de14646c0b57a89a114c0dbb4fa5864a
+源码/docs/BUILD.md                                                   10,513 bytes sha256=5a3f385255d0a99d3ae59f501d582354f3362d6f81b8a7b9b4321f9aadd1fa32
+源码/github-workflows/build-trustcache-umi.yml                        3,084 bytes sha256=6d72878e958d57c4dae42aa77c405ca4bef69b176a8c0a26de51a6b45300497f
+源码/ipsw-inputs.json                                                 2,226 bytes sha256=45fb5912ff1f9e4637f9939316822d907b891e9864d583936bd22ef0faeffe93
+源码/overlay/BootShim/BootShim.S                                      2,062 bytes sha256=b5c9e4b8fa8a03f3e79f0b242a0fb000d47e55cd936a9c27fb880ed69a217c48
+源码/overlay/UmiRamPayloadDxe/UmiRamPayload.c                         6,919 bytes sha256=a3bad9132fcba63d812fd5e67e64f6e423967168a668729e8e7d3ee346d1523d
+源码/overlay/umiPkg/umi.dsc                                           3,129 bytes sha256=1d8aa8177c8f6a2dcc88b41f13af3eb089923f0a2a967f5c300eb87bc6a58fcc
+源码/overlay/umiPkg/umi.fdf                                           2,294 bytes sha256=02b03f567940623da722b58cfd2d1ce358da0d6c267272170b8e460c1068bf58
+源码/package/Kit.toml                                                   392 bytes sha256=113568efefe2fca6eda63228fabd1ae2834e76ea8abfc5540f8a3da031a60faf
+源码/package/unixnu-memory.toml                                         358 bytes sha256=5270a16cba0b8807397d813e6a8262318e6af5ef66a65b1e2007e56e84f3467e
+源码/package/unixnu-payload64.toml                                      377 bytes sha256=780521a657fae8eecce8e828da4b7aa65316d7f91568a9e63c0d2e2f5cc3c573
+源码/package/unixnu-xnu-entry.toml                                      388 bytes sha256=347f6dc6ddadb189aa9449d43a0e03152dc2db100416a37353c9855af6822e6e
+源码/package/unixnu-xnu-prelink.toml                                  1,231 bytes sha256=53fdee7a9d7d0f386c0bb6cb629a3f88d900a9f1e973440e5b367d0301193280
+源码/package/unixnu-xnu.toml                                            390 bytes sha256=e11327f9316094738ce9d980e13bc05c0f0bfbd5a031ce04a50bd3ced3a5bb82
+源码/package/unixnu.toml                                                361 bytes sha256=fb7dce13f62481b39cd6ca7a081e644ec1d77e7ab0128cddc6af4c546f900a28
+源码/scripts/fetch-ipsw-members.py                                    9,214 bytes sha256=98a81a25d1a21313d87ce70530c0e9db7502e8fe99d829fceb8b933404a5e265
+源码/scripts/inject-trustcache.py                                     3,147 bytes sha256=6c16db43e86c6ba074845867f350508c7f6d02a435afe859226cba1ea31aebac
+源码/scripts/make-umi-bootimg.py                                      9,196 bytes sha256=5add93906d0c494c844f2f3ed0a5413017f1a71fa06f1c779c7d2c3f0bd0bda5
+源码/uefi-umi-main/BootShim/BootShim.S                                2,062 bytes sha256=b5c9e4b8fa8a03f3e79f0b242a0fb000d47e55cd936a9c27fb880ed69a217c48
+源码/uefi-umi-main/BootShim/BootShimProbe.S                           2,805 bytes sha256=eba460217557ba5d4ff6308be52aab4e2f6e0662692242b0673e01e6b76e0e97
+源码/uefi-umi-main/BootShim/Makefile                                    411 bytes sha256=d37dba407edd88f7596d909ed6f30d3bba60e3c318c47143815e2eb085f89a32
+辅助脚本/getlog.py                                                      1,808 bytes sha256=38b6119b4f74047ef0d212a462e6886023b8d997202e77c58efd29e981bd81f2
+辅助脚本/ghkit.py                                                       8,459 bytes sha256=f00eb6125361ba330f8fcd7f4d0c2637123ae808f94c041b95b8127cb737e05c
+辅助脚本/ghsync.py                                                      9,928 bytes sha256=afa638a33b626290704a5683fabf1450c30e3fc5f728e933ce80ce90c06dbee8
+
+Total: 42 files, 174,018,795 bytes (166.0 MB)
