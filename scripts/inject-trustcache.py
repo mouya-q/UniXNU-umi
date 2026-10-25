@@ -49,8 +49,11 @@ def main():
     print(f"SHA256:   {bundle_sha}")
 
     if bundle_sha != EXPECTED_BUNDLE_SHA256:
-        print(f"WARNING: bundle SHA256 differs from expected {EXPECTED_BUNDLE_SHA256}",
-              file=sys.stderr)
+        print(f"ERROR: bundle SHA256 mismatch!", file=sys.stderr)
+        print(f"  expected: {EXPECTED_BUNDLE_SHA256}", file=sys.stderr)
+        print(f"  actual:   {bundle_sha}", file=sys.stderr)
+        print(f"Refusing to inject — trust cache bundle does not match pinned hash.", file=sys.stderr)
+        sys.exit(1)
 
     # Inject using mcopy
     print(f"\nInjecting -> {TRUSTCACHE_FAT_PATH}")
