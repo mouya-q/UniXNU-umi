@@ -25,10 +25,19 @@ import sys
 import zlib
 from pathlib import Path
 
-# Memory map constants (must match UmiRamPayloadDxe and board.toml)
-PAGE_SIZE = 4096
-KERNEL_ADDR = 0x10008000      # board.toml kernel_offset (base 0x10000000 + 0x8000)
-RAMDISK_ADDR = 0xA0000000     # UmiRamPayloadDxe BOOT_BASE
+# Memory map constants — must match the known-good Mu-umi-0.img baseline
+# that ABL actually accepts on Xiaomi Mi 10 (umi, SM8250).
+#   page_size   = 2048  (ABL rejects 4096)
+#   base        = 0x10000000
+#   kernel_addr = base + 0x00008000 = 0x10008000
+#   tags_addr   = base + 0x00000100 = 0x10000100  (ABL requires non-zero)
+#   ramdisk_addr = 0xA0000000  (UmiRamPayloadDxe BOOT_BASE; ABL loads 64 MiB
+#                              payload here; UmiRamPayloadDxe scans this window)
+PAGE_SIZE = 2048
+BASE_ADDR = 0x10000000
+KERNEL_ADDR = 0x10008000
+TAGS_ADDR = 0x10000100
+RAMDISK_ADDR = 0xA0000000
 SECOND_ADDR = 0x00000000
 ANDROID_MAGIC = b'ANDROID!'
 
@@ -53,6 +62,14 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _pad_to_page(data: bytes, page_size: int = PAGE_SIZE) -> bytes:
+    """Pad *data* with zeros to the next page boundary."""
+    remainder = len(data) % page_size
+    if remainder == 0:
+        return b''
+    return b'\x00' * (page_size - remainder)
+
+
 def build_boot_image(bootshim: bytes, uefi_fd: bytes, payload: bytes) -> bytes:
     """Assemble an Android boot image v1 with kernel + ramdisk."""
     blob = bootshim + uefi_fd
@@ -65,7 +82,7 @@ def build_boot_image(bootshim: bytes, uefi_fd: bytes, payload: bytes) -> bytes:
     r_pages = (ramdisk_size + PAGE_SIZE - 1) // PAGE_SIZE
     total_size = PAGE_SIZE * (1 + k_pages + r_pages)
 
-    # Build header (v1, padded to one page)
+    # Build header (v1, padded to one page at PAGE_SIZE)
     header = bytearray(PAGE_SIZE)
     header[0:8] = ANDROID_MAGIC
     struct.pack_into('<I', header, 8, kernel_size)        # kernel_size
@@ -74,13 +91,25 @@ def build_boot_image(bootshim: bytes, uefi_fd: bytes, payload: bytes) -> bytes:
     struct.pack_into('<I', header, 20, RAMDISK_ADDR)      # ramdisk_addr
     struct.pack_into('<I', header, 24, 0)                 # second_size
     struct.pack_into('<I', header, 28, SECOND_ADDR)       # second_addr
-    struct.pack_into('<I', header, 32, 0)                 # tags_addr (no DTB appended)
+    struct.pack_into('<I', header, 32, TAGS_ADDR)         # tags_addr (ABL requires non-zero)
     struct.pack_into('<I', header, 36, PAGE_SIZE)         # page_size
     struct.pack_into('<I', header, 40, 1)                 # header_version
     # v1 additional fields start at offset 1632
     struct.pack_into('<I', header, 1632, 0)               # recovery_dtbo_size
     struct.pack_into('<Q', header, 1636, 0)               # recovery_dtbo_addr
     struct.pack_into('<I', header, 1644, HEADER_SIZE_V1)  # header_size = 0x670
+
+    # Compute AOSP-standard id = SHA256(header_padding + kernel + kernel_padding
+    #                                  + ramdisk + ramdisk_padding)[:32]
+    # This matches what mkbootimg produces and what ABL expects.
+    sha = hashlib.sha256()
+    sha.update(b'\x00' * (PAGE_SIZE - HEADER_SIZE_V1))   # header padding
+    sha.update(kernel_gz)                                 # kernel data
+    sha.update(_pad_to_page(kernel_gz))                   # kernel padding
+    sha.update(payload)                                   # ramdisk data
+    sha.update(_pad_to_page(payload))                     # ramdisk padding
+    img_id = sha.digest()[:32]
+    header[576:608] = img_id                              # id (8 × uint32 = 32 bytes)
 
     image = bytearray(total_size)
     image[0:PAGE_SIZE] = header
@@ -118,9 +147,19 @@ def verify_boot_image(img: bytes, bootshim: bytes, uefi_fd: bytes, payload: byte
     assert ra == RAMDISK_ADDR, f"ramdisk_addr mismatch: 0x{ra:x} != 0x{RAMDISK_ADDR:x}"
     assert ka == KERNEL_ADDR, f"kernel_addr mismatch: 0x{ka:x} != 0x{KERNEL_ADDR:x}"
     assert ss == 0, f"second_size should be 0, got {ss}"
-    assert ta == 0, f"tags_addr should be 0 (no DTB appended), got 0x{ta:x}"
+    assert ta == TAGS_ADDR, (
+        f"tags_addr mismatch: 0x{ta:08x} != 0x{TAGS_ADDR:08x}. "
+        f"ABL requires tags_addr = base(0x10000000) + 0x100."
+    )
     assert rds == 0, f"recovery_dtbo_size should be 0, got {rds}"
     assert rda == 0, f"recovery_dtbo_addr should be 0, got 0x{rda:x}"
+
+    # --- id field: must be non-zero (AOSP SHA256 of image payload) ---
+    id_bytes = img[576:608]
+    assert id_bytes != b'\x00' * 32, (
+        "id field is all zeros — ABL may reject image. "
+        "id must be SHA256(header_pad + kernel + kernel_pad + ramdisk + ramdisk_pad)[:32]."
+    )
 
     # --- Total image size must be an exact page multiple ---
     expected_total = PAGE_SIZE * (1 + (ks + ps - 1) // ps + (rs + ps - 1) // ps)
