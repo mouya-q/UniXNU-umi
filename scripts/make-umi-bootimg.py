@@ -25,18 +25,20 @@ import sys
 import zlib
 from pathlib import Path
 
-# Memory map constants — must match the known-good Mu-umi-0.img baseline
-# that ABL actually accepts on Xiaomi Mi 10 (umi, SM8250).
-#   page_size   = 2048  (ABL rejects 4096)
-#   base        = 0x10000000
-#   kernel_addr = base + 0x00008000 = 0x10008000
-#   tags_addr   = base + 0x00000100 = 0x10000100  (ABL requires non-zero)
+# Memory map constants — must exactly match board.toml [bootimg.image]
+# as verified on Xiaomi Mi 10 (umi, SM8250) by the upstream reAAAq/UniXNU-umi
+# project (12 GiB / 256 GiB device, confirmed boot to iPadOS Hello screen).
+#   page_size    = 4096   (board.toml: pagesize = 4096)
+#   base         = 0      (board.toml: base = 0)
+#   kernel_addr  = 0x8000 (board.toml: kernel_offset = 0x8000)
+#   tags_addr    = 0x1e00000  (board.toml: tags_offset = 0x1e00000)
 #   ramdisk_addr = 0xA0000000  (UmiRamPayloadDxe BOOT_BASE; ABL loads 64 MiB
 #                              payload here; UmiRamPayloadDxe scans this window)
-PAGE_SIZE = 2048
-BASE_ADDR = 0x10000000
-KERNEL_ADDR = 0x10008000
-TAGS_ADDR = 0x10000100
+# build_umi_uefi.py asserts: page == 4096 and version == 1
+PAGE_SIZE = 4096
+BASE_ADDR = 0x00000000
+KERNEL_ADDR = 0x00008000
+TAGS_ADDR = 0x01e00000
 RAMDISK_ADDR = 0xA0000000
 SECOND_ADDR = 0x00000000
 ANDROID_MAGIC = b'ANDROID!'
@@ -149,7 +151,7 @@ def verify_boot_image(img: bytes, bootshim: bytes, uefi_fd: bytes, payload: byte
     assert ss == 0, f"second_size should be 0, got {ss}"
     assert ta == TAGS_ADDR, (
         f"tags_addr mismatch: 0x{ta:08x} != 0x{TAGS_ADDR:08x}. "
-        f"ABL requires tags_addr = base(0x10000000) + 0x100."
+        f"board.toml: tags_offset = 0x1e00000, base = 0."
     )
     assert rds == 0, f"recovery_dtbo_size should be 0, got {rds}"
     assert rda == 0, f"recovery_dtbo_addr should be 0, got 0x{rda:x}"
