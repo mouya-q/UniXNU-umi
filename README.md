@@ -87,6 +87,17 @@ and published by the `Build umi trust cache bundle` workflow. It is the only
 source of `trust_cache_url` for the upstream `macos.yml` workflow; the IPSW
 itself is never downloaded in full.
 
+### RAM-only boot (no partition write)
+
+The complete boot image for `fastboot boot` is assembled by
+`scripts/make-umi-bootimg.py`. It packs the UEFI firmware (BootShim +
+SILICIUM_UEFI.fd) as the gzip kernel and the 64 MiB FAT32 payload (containing
+kernel.macho, ADT and trust cache) as the ramdisk. The ramdisk is loaded to
+`0xA0000000`, where `UmiRamPayloadDxe` finds it via the DTB `/chosen`
+`linux,initrd-start/end` properties. Nothing is written to the phone's
+storage: a reboot returns to Android. See [BUILD.md](docs/BUILD.md) for the
+full assembly and boot-flow description.
+
 ## Credits and license
 
 Based on [UniXNU](https://github.com/UniXNU/UniXNU),
