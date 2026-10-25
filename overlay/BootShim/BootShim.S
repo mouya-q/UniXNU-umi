@@ -156,6 +156,9 @@ _PaintBlue:
   str   w20, [x23]
   dsb   sy
 
+  /* Restore DT handoff (x0) saved at _Start before jumping to SEC */
+  mov   x0, x12
+
   br    x5
 
   /* If SEC returns (shouldn't), paint WHITE and spin */
