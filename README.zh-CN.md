@@ -67,6 +67,15 @@ Apple 组件、厂商固件、Data 种子和设备转储均不包含在仓库中
 分区范围与高位内存窗口只在当前容量配置上测量过，其他机型或容量必须重新核对。
 测试安装替换了 Android userdata；本仓库不提供通用刷机脚本，请保留 Recovery 和备份。
 
+### 内存引导（不写分区）
+
+`scripts/make-umi-bootimg.py` 将 UEFI 固件（BootShim + SILICIUM_UEFI.fd）
+打包为 gzip 内核，将 64 MiB FAT32 payload（含 kernel.macho、ADT 和 trust
+cache）作为 ramdisk。ABL 将 ramdisk 加载到 `0xA0000000`，
+`UmiRamPayloadDxe` 通过 DTB `/chosen` 的 `linux,initrd-start/end` 找到 FAT32
+卷并挂载为只读块设备。`fastboot boot` 临时引导，不写入任何分区，重启即回
+Android。详见 [BUILD.md](docs/BUILD.md)。
+
 ## 致谢与许可
 
 基于 UniXNU、UniXNU-sheng、Mu-Silicium，以及公开的 Xiaomi／LineageOS SM8250 资料。
