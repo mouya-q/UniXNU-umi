@@ -123,6 +123,82 @@ Do not modify the module contents or add entries. A modified bundle fails the
 payload step's `board.toml [payload]` allow-list and breaks the AMFI query that
 `bringup/tools/check_umi_trustcache_qemu.py` qualifies.
 
+## RAM-only boot image (no partition write)
+
+The complete boot image for `fastboot boot` (temporary boot, no flash) is
+assembled from three artifacts: the UEFI boot image (BootShim + SILICIUM_UEFI.fd),
+the FAT32 payload image (kernel.macho + ADT), and the trust cache bundle.
+
+### Prerequisites
+
+Download these CI artifacts first:
+
+| Artifact | CI source | Contents |
+|---|---|---|
+| `BootShim.bin` + `SILICIUM_UEFI.fd` | `build-uefi-umi.yml` Run #15 | 304 B shim + 3 MiB UEFI FD |
+| `payload.img` | `macos.yml` Run #25 | 64 MiB FAT32 (kernel.macho + ADT) |
+| `original-static-system.bundle` | `build-trustcache-umi.yml` Run #6 | 61,356 B trust cache bundle |
+
+### Assembly
+
+```sh
+# 1. Inject trust cache into the FAT32 payload image
+python3 scripts/inject-trustcache.py \
+  --payload payload.img \
+  --bundle original-static-system.bundle \
+  --verify
+
+# 2. Assemble the complete boot image
+python3 scripts/make-umi-bootimg.py \
+  --bootshim BootShim.bin \
+  --uefi-fd SILICIUM_UEFI.fd \
+  --payload payload.img \
+  --output umi-xnu-boot.img
+```
+
+The output `umi-xnu-boot.img` (~65 MiB) is a standard Android boot image v1:
+
+```
+Header (4 KiB, page_size=4096, header_version=1)
+  kernel_size:   gzip(BootShim.bin + SILICIUM_UEFI.fd)
+  ramdisk_size:  FAT32 payload (64 MiB)
+  ramdisk_addr:  0xA0000000   ← UmiRamPayloadDxe BOOT_BASE
+  kernel_addr:   0x10008000
+Kernel (gzip, ~177 pages)
+Ramdisk (FAT32, 16384 pages)
+```
+
+### Boot flow
+
+```
+fastboot boot umi-xnu-boot.img
+    ↓  (no partition is written)
+ABL decompresses kernel → BootShim (304 B) at 0x10008000
+ABL loads ramdisk → 0xA0000000, records linux,initrd-start/end in DTB /chosen
+    ↓
+BootShim: copies UEFI FD to 0x9FC00000, flushes cache, jumps to SEC
+    ↓
+UEFI (Mu-Silicium): UmiRamPayloadDxe reads DTB /chosen initrd range
+    → finds FAT32 volume at 0xA0000000 (256 MiB window)
+    → mounts as read-only block device
+    ↓
+DarwinBoot: reads kernel.macho + kernel.macho.adt + kernel.macho.trustcache
+    from FAT32 → launches XNU with -v keepsyms=1 kt_fixed_zones=120
+    ↓
+Reboot → ABL loads original boot_a → Android (nothing was flashed)
+```
+
+### Returning to Android
+
+Just reboot the phone. `fastboot boot` loads the image into RAM only; the
+boot partition and userdata are untouched. After a reboot, ABL reads the
+original Android kernel from the boot partition and starts normally.
+
+If the phone was booted into fastboot mode (power + volume down), use
+`fastboot reboot` to return to Android. If the phone was booted from a
+`fastboot boot` session, a normal reboot (or power + volume down → fastboot
+→ `fastboot reboot`) returns to Android.
+
 ## Touch and log checks
 
 Attempt 80 uses `umi-fts-gpi=1` for native GPI DMA I²C. The startup path enables
